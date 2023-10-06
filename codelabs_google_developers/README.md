@@ -90,3 +90,51 @@ The GPU cannot draw vertices with data from a JavaScript array. GPUs frequently 
 
 For a lot of values, including vertex data, the GPU-side memory is managed through GPUBuffer objects. A buffer is a block of memory that's easily accessible to the GPU and flagged for certain purposes. You can think of it a little bit like a GPU-visible TypedArray.
 
+# Start with shaders
+Now you have the data you want to render, but you still need to tell the GPU exactly how to process it. A large part of that happens with shaders.
+
+Shaders are small programs that you write and that execute on your GPU. Each shader operates on a different stage of the data: Vertex processing, Fragment processing, or general Compute. Because they're on the GPU, they are structured more rigidly than your average JavaScript. But that structure allows them to execute very fast and, crucially, in parallel!
+
+Shaders in WebGPU are written in a shading language called WGSL (WebGPU Shading Language). WGSL is, syntactically, a bit like Rust, with features aimed at making common types of GPU work (like vector and matrix math) easier and faster. Teaching the entirety of the shading language is well beyond the scope of this codelab, but hopefully you'll pick up some of the basics as you walk through some simple examples.
+
+The shaders themselves get passed into WebGPU as strings.
+
+```js
+const cellShaderModule = device.createShaderModule({
+  label: "Cell shader",
+  code: `
+    // Your shader code will go here
+  `
+});
+
+```
+
+# Define the vertex shader
+Start with the vertex shader because that's where the GPU starts, too!
+
+A vertex shader is defined as a function, and the GPU calls that function once for every vertex in your vertexBuffer. Since your vertexBuffer has six positions (vertices) in it, the function you define gets called six times. Each time it is called, a different position from the vertexBuffer is passed to the function as an argument, and it's the job of the vertex shader function to return a corresponding position in clip space.
+
+It's important to understand that they won't necessarily get called in sequential order, either. Instead, GPUs excel at running shaders like these in parallel, potentially processing hundreds (or even thousands!) of vertices at the same time! This is a huge part of what's responsible for GPUs incredible speed, but it comes with limitations. In order to ensure extreme parallelization, vertex shaders cannot communicate with each other. Each shader invocation can only see data for a single vertex at a time, and is only able to output values for a single vertex.
+
+In WGSL, a vertex shader function can be named whatever you want, but it must have the @vertex attribute in front of it in order to indicate which shader stage it represents. WGSL denotes functions with the fn keyword, uses parentheses to declare any arguments, and uses curly braces to define the scope.
+
+# vec4f (x,y,z,w)
+Of course, if the function has a return type, you need to actually return a value in the function body. You can construct a new vec4f to return, using the syntax vec4f(x, y, z, w). The x, y, and z values are all floating point numbers that, in the return value, indicate where the vertex lies in clip space.
+
+Note: So what's w? The w value is the fourth component of a three-dimensional homogeneous vertex. Confused? That's OK! You don't have to worry about it much.
+
+In practical terms, having the w value there makes math with 4x4 matrices work, which is something that you do a lot of when rendering 3D graphics, but it's rare that you need to manipulate it directly. You want to just leave it as 1 for this codelab.
+
+# Define the fragment shader
+Next up is the fragment shader. Fragment shaders operate in a very similar way to vertex shaders, but rather than being invoked for every vertex, they're invoked for every pixel being drawn.
+
+**Fragment shaders are always called after vertex shaders.** The GPU takes the output of the vertex shaders and triangulates it, creating triangles out of sets of three points. It then rasterizes each of those triangles by figuring out which pixels of the output color attachments are included in that triangle, and then calls the fragment shader once for each of those pixels. The fragment shader returns a color, typically calculated from values sent to it from the vertex shader and assets like textures, which the GPU writes to the color attachment.
+
+# Create a render pipeline
+A shader module can't be used for rendering on its own. Instead, you have to use it as part of a GPURenderPipeline, created by calling device.createRenderPipeline(). The render pipeline controls how geometry is drawn, including things like which shaders are used, how to interpret data in vertex buffers, which kind of geometry should be rendered (lines, points, triangles...), and more!
+
+The render pipeline is the most complex object in the entire API, but don't worry! Most of the values you can pass to it are optional, and you only need to provide a few to start.
+
+Create a render pipeline, like this:
+
+

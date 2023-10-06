@@ -22,6 +22,76 @@ context.configure({
   format: canvasFormat,
 })
 
+const vertices = new Float32Array([
+//   X,    Y
+  -0.8, -0.8, // Triangle 1 (Blue)
+   0.8, -0.8,
+   0.8,  0.8,
+
+  -0.8, -0.8, // Triangle 2 (Red)
+   0.8,  0.8,
+  -0.8,  0.8,
+]);
+
+const vertexBuffer = device.createBuffer({
+  label: "Cell vertices",
+  size: vertices.byteLength,
+  // bitwise 연산으로 이 버퍼의 사용처를 미리 정해둔다.
+  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+})
+
+device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices)
+
+// Define the vertex data structure with a GPUVertexBufferLayout dictionary:
+const vertexBufferLayout = {
+  arrayStride: 8,
+  attributes: [
+    {
+      format: "float32x2",
+      offset: 0,
+      shaderLocation: 0, // Position, see vertex shader
+    },
+  ],
+}
+
+const cellShaderModule = device.createShaderModule({
+  label: "Cell shader",
+  code: `
+    // Your shader code will go here
+    @vertex
+    fn vertexMain(@location(0) pos: vec2f) -> @builtin(position) vec4f {
+      return vec4f(pos.x, pos.y, 0, 1); // (X, Y, Z, W) (이런 점은 GPU 가 무시해서 그려지지 않는다.)
+      // return vec4f(pos, 0, 1); // 위와 동일한 코드. 너무 흔한 작업이라 분리 안해도 됨
+    }
+
+    @fragment
+    fn fragmentMain() -> @location(0) vec4f {
+      return vec4f(1, 0, 0, 1);
+    }
+  `,
+})
+
+const cellPipeline = device.createRenderPipeline({
+  label: "Cell pipeline",
+  layout: "auto",
+  // vertex stage details
+  vertex: {
+    module: cellShaderModule,
+    entryPoint: "vertexMain",
+    buffers: [vertexBufferLayout],
+  },
+  fragment: {
+    module: cellShaderModule,
+    entryPoint: "fragmentMain",
+    targets: [
+      {
+        format: canvasFormat,
+      },
+    ],
+  },
+})
+
+
 // 가장 중요한 옵션은 컨텍스트를 사용할 device 및 컨텍스트에서 사용해야 하는 텍스처 형식인 format입니다.
 
 // Textures are the objects that WebGPU uses to store image data, and each texture has a format that lets the GPU know how that data is laid out in memory.
@@ -57,6 +127,11 @@ const pass = encoder.beginRenderPass({
 // A storeOp value of "store" indicates that once the render pass is finished you want the results of any drawing done during the render pass saved into the texture.
 
 // Once the render pass has begun you do... nothing! At least for now. The act of starting the render pass with loadOp: "clear" is enough to clear the texture view and the canvas.
+
+pass.setPipeline(cellPipeline);
+pass.setVertexBuffer(0, vertexBuffer);
+pass.draw(vertices.length / 2); // 6 vertices
+
 // End the render pass by adding the following call immediately after beginRenderPass():
 pass.end()
 
@@ -70,9 +145,3 @@ pass.end()
 
 // Finish the command buffer and immediately submit it.
 device.queue.submit([encoder.finish()])
-
-const vertexBuffer = device.createBuffer({
-  label: "Cell vertices",
-  size: vertices.byteLength,
-  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-})
