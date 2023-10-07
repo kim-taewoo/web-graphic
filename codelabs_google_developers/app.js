@@ -57,12 +57,19 @@ const vertexBufferLayout = {
 const cellShaderModule = device.createShaderModule({
   label: "Cell shader",
   code: `
-    // Your shader code will go here
+    @group(0) @binding(0) var<uniform> grid: vec2f;
+
     @vertex
-    fn vertexMain(@location(0) pos: vec2f) -> @builtin(position) vec4f {
-      return vec4f(pos.x, pos.y, 0, 1); // (X, Y, Z, W) (이런 점은 GPU 가 무시해서 그려지지 않는다.)
-      // return vec4f(pos, 0, 1); // 위와 동일한 코드. 너무 흔한 작업이라 분리 안해도 됨
+    fn vertexMain(@location(0) pos: vec2f) ->
+      @builtin(position) vec4f {
+      return vec4f(pos / grid, 0, 1);
     }
+
+    // @vertex
+    // fn vertexMain(@location(0) pos: vec2f) -> @builtin(position) vec4f {
+    //   return vec4f(pos.x, pos.y, 0, 1); // (X, Y, Z, W) (이런 점은 GPU 가 무시해서 그려지지 않는다.)
+    //   // return vec4f(pos, 0, 1); // 위와 동일한 코드. 너무 흔한 작업이라 분리 안해도 됨
+    // }
 
     @fragment
     fn fragmentMain() -> @location(0) vec4f {
@@ -145,3 +152,14 @@ pass.end()
 
 // Finish the command buffer and immediately submit it.
 device.queue.submit([encoder.finish()])
+
+const GRID_SIZE = 4
+
+// Create a uniform buffer that describes the grid.
+const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
+const uniformBuffer = device.createBuffer({
+  label: "Grid Uniforms",
+  size: uniformArray.byteLength,
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+});
+device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
